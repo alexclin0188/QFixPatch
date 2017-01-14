@@ -23,6 +23,7 @@ public class TestActivity extends TestActivity2 {
         appInfo1(builder);
         appInfo2(builder);
         appendInfo(builder);
+        new FinalBug().appendBugMsg(builder);
         tv.setText(builder.toString());
     }
 

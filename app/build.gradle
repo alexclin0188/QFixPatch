@@ -7,7 +7,7 @@ qfix{
     debugOn true //debug模式是否开启补丁构建task,可选
     outputDir 'qfix_output'//补丁基础信息默认输入目录和构建输出目录，必须
     excludeClass = ["App.class"]//需要排除的类，会自动排除Application及其父类，此处只是实例，可选
-    includePackage = []//需要包含的package，可选
+    //includePackage = []//需要包含的package，可选
     strictMode true //严格模式，用于解决ART下dex激进内联问题，详情参看README,可选
 }
 

@@ -89,7 +89,7 @@ public class AndroidUtils {
         return compareVersionName(project.gradle.gradleVersion, "2.10") >= 0;
     }
 
-    private static int compareVersionName(String str1, String str2) {
+    public static int compareVersionName(String str1, String str2) {
         String[] thisParts = str1.split("-")[0].split("\\.");
         String[] thatParts = str2.split("-")[0].split("\\.");
         int length = Math.max(thisParts.length, thatParts.length);

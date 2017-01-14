@@ -48,7 +48,11 @@ public class Creator {
         if(!outDirPath||outDirPath.empty){
             throw new InvalidUserDataException("You must set outputDir in qfix-extension for patch build");
         }
-        outputDir = new File(outDirPath);
+        if(outDirPath.startsWith("/")){
+            outputDir = new File(outDirPath);
+        }else{
+            outputDir = new File(project.rootDir,outDirPath);
+        }
         if(outputDir.exists()&&!outputDir.isDirectory()){
             throw new InvalidUserDataException("outputDir config in qfix-extension must be a directory");
         }
@@ -88,12 +92,6 @@ public class Creator {
         return new File(patchOutDir,"${variant.dirName}")
     }
 
-    /**
-     * 返回基础构建时dex输出路径 TODO 删除
-     *
-     * @param variant
-     * @return
-     */
     public File getDexOutDir(BaseVariant variant){
         return new File(baseInfoDir,"${variant.dirName}/dex")
     }
@@ -106,7 +104,7 @@ public class Creator {
                 return file.isFile()&&file.name.endsWith(".apk");
             }
         })
-        return apkFiles.length>0?apkFiles[0]:null;
+        return apkFiles&&apkFiles.length>0?apkFiles[0]:null;
     }
 
     public File getApkOutDir(BaseVariant variant,String fileName){
@@ -153,6 +151,7 @@ public class Creator {
      * @return
      */
     public File getBaseMappingFile(BaseVariant variant){
+        if(!baseInfoDir) return null;
         return new File(baseInfoDir,"${variant.dirName}/${MAPPING_TXT}")
     }
 
@@ -161,7 +160,7 @@ public class Creator {
             String timeName = TIME_NAME_FORMAT.format(new Date());
             String baseName = baseInfoDir.getName();
             if(baseName.startsWith(DIR_BASE)){
-                baseName = baseName.substring(6);
+                baseName = baseName.substring(5);
             }else{
                 baseName = baseInfoDir.absolutePath.replace(File.separator,"-");
             }
@@ -183,7 +182,7 @@ public class Creator {
         long maxTime = -1;
         int index = -1;
         for(int i=0;i<baseDirs.length;i++){
-            String timeStr = baseDirs[i].name.substring(6);
+            String timeStr = baseDirs[i].name.substring(5);
             try {
                 long time = TIME_NAME_FORMAT.parse(timeStr).time;
                 if(time>maxTime){

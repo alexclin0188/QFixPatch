@@ -32,7 +32,7 @@ public class PatchSet {
             }
         }
         return !entryName.endsWith(".class") || isAndroidSupport(entryName) ||
-                isHotFixLib(entryName) || isBuildConfigOrR(entryName);
+                isQFixLib(entryName) || isBuildConfigOrR(entryName);
     }
 
     private static boolean isBuildConfigOrR(String entryName){
@@ -40,9 +40,8 @@ public class PatchSet {
                 entryName.endsWith("/R.class") || entryName.endsWith("/BuildConfig.class");
     }
 
-    private static boolean isHotFixLib(String entryName){
-        return entryName.startsWith("com/paic/hyperion/core/hfhotfix/") ||
-                entryName.startsWith("com/paic/hyperion/core/hotfix/");
+    private static boolean isQFixLib(String entryName){
+        return entryName.startsWith("alexclin/patch/qfix") ;
     }
 
     private static boolean isAndroidSupport(String entryName){

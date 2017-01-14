@@ -16,4 +16,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Hello World!"/>
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/tv_test"
+        android:layout_marginTop="10dip"
+        android:text="StartTest"
+        android:visibility="gone"
+        android:id="@+id/testBtn"/>
 </RelativeLayout>

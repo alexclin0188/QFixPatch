@@ -25,16 +25,19 @@ class DexClassIdResolve {
                 patchClassSet.add(ctClassName);
             }
         }
-        System.out.println("ResolveDexClassId patchClass size=" + patchClassSet.size());
-
+        println "ResolveDexClassId patchClass size=" + patchClassSet.size();
+        if(patchClassSet.size()==0){
+            println "No change class was found, so no patch will be generated!!!!!!"
+            return
+        }
         File[] dexFileList = dexDir.listFiles(new FileFilter() {
             @Override
             public boolean accept(File file) {
                 return file.isFile() && file.getName().startsWith("classes") && file.getName().endsWith(".dex");
             }
         });
-        if (dexFileList == null) {
-            throw new IllegalStateException("dexFileList in dexFilePath[" + dexDir + "] is null");
+        if (dexFileList == null||dexFileList.length==0) {
+            throw new IllegalStateException("dexFileList in dexFilePath[" + dexDir + "] is null/empty");
         }
         System.out.println("ResolveDexClassId dexFileList size=" + dexFileList.length);
         StringBuilder outputStr = new StringBuilder("");
@@ -42,11 +45,9 @@ class DexClassIdResolve {
             String command = dexDumpPath + " -h " + file.getAbsolutePath();
             int dexIndex = getDexIndex(file.getName());
             Process process = Runtime.getRuntime().exec(command);
-            ProcessRunnable procRunnable = new ProcessRunnable(process.getInputStream(), dexIndex, patchClassSet);
-            new Thread(procRunnable).start();
-            new Thread(new LogErrorRunnable(process.getErrorStream())).start();
-            process.waitFor();
-            for (ClassIdMap item : procRunnable.mClassIdMapList) {
+            ArrayList<ClassIdMap> classIdMaps = readClassIdMap(process.getInputStream(), dexIndex, patchClassSet);
+            readErrorInfo(process.getErrorStream());
+            for (ClassIdMap item : classIdMaps) {
                 System.out.println("ResolveDexClassId Item=" + item.toString());
                 outputStr.append(item.toString()).append("\n");
             }
@@ -109,111 +110,92 @@ class DexClassIdResolve {
         }
     }
 
-    static class ProcessRunnable implements Runnable {
-        InputStream mInputStream;
-        int mDexIndex;
-        HashSet<String> mPatchSet;
-        public ArrayList<ClassIdMap> mClassIdMapList;
-
-        public ProcessRunnable(InputStream inputStream, int dexIndex, HashSet<String> patchSet) {
-            mInputStream = inputStream;
-            mDexIndex = dexIndex;
-            mPatchSet = patchSet;
-            mClassIdMapList = new ArrayList<ClassIdMap>();
-        }
-
-        public void run() {
-            InputStreamReader isReader = null;
-            BufferedReader reader = null;
-            try {
-                isReader = new InputStreamReader(mInputStream);
-                reader = new BufferedReader(isReader);
-                boolean findHead = false;
-                boolean findClass = false;
-                int classIndex = -1;
-                long classIdx = -1;
-                def line
-                while ((line = reader.readLine()) != null) {
-                    if (line.startsWith("Class #") && line.endsWith(" header:") && !findHead && classIndex < 0) {
-                        findHead = true;
-                        classIndex = Integer.parseInt(line.substring("Class #".length(), line.indexOf(" header:")));
-                    } else if (line.startsWith("class_idx") && findHead && classIndex >= 0 && classIdx < 0) {
-                        classIdx = Integer.parseInt(line.substring(line.indexOf(": ") + 2));
-                    } else if (line.startsWith("Class #") && findHead && classIndex >= 0
-                            && line.contains(String.valueOf(classIndex)) && classIdx > 0) {
-                        findClass = true;
-                    } else if (line.startsWith("  Class descriptor") && findHead && findClass && classIndex >= 0 && classIdx > 0) {
-                        String className = line.substring(line.indexOf("'L") + 2, line.indexOf(";'"));
-                        if (mPatchSet.contains(className)) {
-                            ClassIdMap item = new ClassIdMap(className, mDexIndex, classIdx);
-                            mClassIdMapList.add(item);
-                        }
-                        findHead = false;
-                        findClass = false;
-                        classIndex = -1;
-                        classIdx = -1;
+    private static ArrayList<ClassIdMap> readClassIdMap(InputStream mInputStream, int mDexIndex, HashSet<String> mPatchSet) {
+        ArrayList<ClassIdMap> mClassIdMapList = new ArrayList<ClassIdMap>();
+        InputStreamReader isReader = null;
+        BufferedReader reader = null;
+        try {
+            isReader = new InputStreamReader(mInputStream);
+            reader = new BufferedReader(isReader);
+            boolean findHead = false;
+            boolean findClass = false;
+            int classIndex = -1;
+            long classIdx = -1;
+            def line
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("Class #") && line.endsWith(" header:") && !findHead && classIndex < 0) {
+                    findHead = true;
+                    classIndex = Integer.parseInt(line.substring("Class #".length(), line.indexOf(" header:")));
+                } else if (line.startsWith("class_idx") && findHead && classIndex >= 0 && classIdx < 0) {
+                    classIdx = Integer.parseInt(line.substring(line.indexOf(": ") + 2));
+                } else if (line.startsWith("Class #") && findHead && classIndex >= 0
+                        && line.contains(String.valueOf(classIndex)) && classIdx > 0) {
+                    findClass = true;
+                } else if (line.startsWith("  Class descriptor") && findHead && findClass && classIndex >= 0 && classIdx > 0) {
+                    String className = line.substring(line.indexOf("'L") + 2, line.indexOf(";'"));
+                    if (mPatchSet.contains(className)) {
+                        ClassIdMap item = new ClassIdMap(className, mDexIndex, classIdx);
+                        mClassIdMapList.add(item);
                     }
+                    findHead = false;
+                    findClass = false;
+                    classIndex = -1;
+                    classIdx = -1;
                 }
-            } catch (Exception e) {
-                System.out.println("ProcessRunnable run exception=" + e);
-                e.printStackTrace();
-            } finally {
-                if (reader != null) {
-                    try {
-                        reader.close();
-                    } catch (Exception e) {
-                        System.out.println("ProcessRunnable close BufferedReader exception=" + e);
-                        e.printStackTrace();
-                    }
+            }
+        } catch (Exception e) {
+            System.out.println("ProcessRunnable run exception=" + e);
+            e.printStackTrace();
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Exception e) {
+                    System.out.println("ProcessRunnable close BufferedReader exception=" + e);
+                    e.printStackTrace();
                 }
-                if (isReader != null) {
-                    try {
-                        isReader.close();
-                    } catch (Exception e) {
-                        System.out.println("ProcessRunnable close InputStreamReader exception=" + e);
-                        e.printStackTrace();
-                    }
+            }
+            if (isReader != null) {
+                try {
+                    isReader.close();
+                } catch (Exception e) {
+                    System.out.println("ProcessRunnable close InputStreamReader exception=" + e);
+                    e.printStackTrace();
                 }
             }
         }
+        return mClassIdMapList;
     }
 
-    static class LogErrorRunnable implements Runnable {
-        InputStream inputStream;
 
-        public LogErrorRunnable(InputStream inputStream) {
-            this.inputStream = inputStream;
-        }
-
-        public void run() {
-            InputStreamReader isReader = null;
-            BufferedReader reader = null;
-            try {
-                isReader = new InputStreamReader(this.inputStream);
-                reader = new BufferedReader(isReader);
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
+    private static void readErrorInfo(InputStream inputStream){
+        InputStreamReader isReader = null;
+        BufferedReader reader = null;
+        try {
+            isReader = new InputStreamReader(inputStream);
+            reader = new BufferedReader(isReader);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+        } catch (Exception e) {
+            System.out.println("LogErrorRunnable run exception=" + e);
+            e.printStackTrace();
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Exception e) {
+                    System.out.println("LogErrorRunnable close BufferedReader exception=" + e);
+                    e.printStackTrace();
                 }
-            } catch (Exception e) {
-                System.out.println("LogErrorRunnable run exception=" + e);
-                e.printStackTrace();
-            } finally {
-                if (reader != null) {
-                    try {
-                        reader.close();
-                    } catch (Exception e) {
-                        System.out.println("LogErrorRunnable close BufferedReader exception=" + e);
-                        e.printStackTrace();
-                    }
-                }
-                if (isReader != null) {
-                    try {
-                        isReader.close();
-                    } catch (Exception e) {
-                        System.out.println("LogErrorRunnable close InputStreamReader exception=" + e);
-                        e.printStackTrace();
-                    }
+            }
+            if (isReader != null) {
+                try {
+                    isReader.close();
+                } catch (Exception e) {
+                    System.out.println("LogErrorRunnable close InputStreamReader exception=" + e);
+                    e.printStackTrace();
                 }
             }
         }
