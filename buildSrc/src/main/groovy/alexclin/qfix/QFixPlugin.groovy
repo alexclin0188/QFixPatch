@@ -37,14 +37,14 @@ public class QFixPlugin implements Plugin<Project> {
         project.afterEvaluate {
             def extension = project.extensions.findByName(PLUGIN_NAME) as QFixExtension
 
-            Creator dirBuilder = new Creator(project,extension);
+            Creator creator = new Creator(project,extension);
             debugOn = extension.debugOn
 
             project.android.applicationVariants.each { variant ->
 
                 if(variant.name.contains(DEBUG)&&!debugOn)
                     return;
-                configTasks(project,variant,dirBuilder);
+                configTasks(project,variant,creator);
             }
 
             //添加总的buildPatch Task
@@ -58,18 +58,18 @@ public class QFixPlugin implements Plugin<Project> {
         }
     }
 
-    static void configTasks(Project project, BaseVariant variant, Creator dirBuilder) {
+    static void configTasks(Project project, BaseVariant variant, Creator creator) {
         Map hashMap
 
         def dexTask = project.tasks.findByName(AndroidUtils.getDexTaskName(project, variant))
         def proguardTask = project.tasks.findByName(AndroidUtils.getProGuardTaskName(project, variant))
 
-        if (dirBuilder.patchTaskEnable()) {
-            File mappingFile = dirBuilder.getBaseMappingFile(variant)
+        if (creator.patchTaskEnable()) {
+            File mappingFile = creator.getBaseMappingFile(variant)
             if (mappingFile.exists()) {
                 AndroidUtils.applyMapping((DefaultTask) proguardTask, variant, mappingFile)
             }
-            def hashFile = dirBuilder.getBaseHashFile(variant)
+            def hashFile = creator.getBaseHashFile(variant)
             hashMap = Utils.parseMap(hashFile)
         }
 
@@ -82,45 +82,50 @@ public class QFixPlugin implements Plugin<Project> {
             if (!apkFile.exists()) {
                 apkFile = new File("${project.buildDir}/outputs/apk/${project.name}-${variant.dirName}-unsigned.apk");
             }
-            Utils.unZipFile(apkFile, dirBuilder.getDexOutDir(variant), ".dex");
+            Utils.copyFile(apkFile,creator.getApkOutDir(variant,apkFile.getName()));
         }
         assembleTask.doLast(saveAssembleClosure)
 
-        File patchOutDir = dirBuilder.getPatchOutDir(variant);
-
-        if (dirBuilder.patchTaskEnable()) {
-
+        if (creator.patchTaskEnable()) {
+            File patchOutDir = creator.getPatchOutDir(variant);
             //保存所有改变的类到指定目录
             def diffClassBeforeDex = "diffClassBeforeDex${variant.name.capitalize()}"
             def diffClassBeforeDexTask = project.task(diffClassBeforeDex) << {
                 //补丁准备工作
-                def baseDexDir = dirBuilder.getBaseDexDir(variant);
+                if(!creator.baseInfoDir){
+                    throw new InvalidUserDataException("no PatchBase dir found, maybe you need run by: ./gradlew clean assembleXxxPatch -P PatchBase=...your patch base..");
+                }
+                def baseDexDir = creator.getDexOutDir(variant)
                 //判断dex目录或apk是否存在,不存在就抛异常
                 if (!baseDexDir.exists()) {
-                    throw new InvalidUserDataException("Not dex dir in:${dirBuilder.baseInfoDir}");
+                    File apkFile = creator.getBaseApkFile(variant);
+                    if(!apkFile.exists()){
+                        throw new InvalidUserDataException("No base apk in:${creator.baseInfoDir}");
+                    }
+                    Utils.unZipFile(apkFile, creator.getDexOutDir(variant), ".dex");
                 }
                 if (!patchOutDir.exists()) patchOutDir.mkdirs()
 
-                dirBuilder.scanModuleInfo(project,variant);
+                creator.scanModuleInfo(project,variant);
 
                 //比较所有类与之前保存的sha值是否有差异，有差异则保存到patchClassDir
                 Set<File> inputFiles = AndroidUtils.getDexTaskInputFiles(project, variant, dexTask)
                 inputFiles.each {
                     inputFile ->
                         if (inputFile.path.endsWith(".jar")) {
-                            diffJar(inputFile, hashMap,dirBuilder,variant)
+                            diffJar(inputFile, hashMap,creator,variant)
                         }
                 }
                 //增加dexDump处理，dump patch class ids
-                def dumpCmdPath = AndroidUtils.getDexDumpPath(project, dirBuilder.sdkDir);
-                if(dirBuilder.isSplit()){
-                    File[] patchClassDirs = dirBuilder.getPatchClassDirs(variant);
+                def dumpCmdPath = AndroidUtils.getDexDumpPath(project, creator.sdkDir);
+                if(creator.isSplit()){
+                    File[] patchClassDirs = creator.getPatchClassDirs(variant);
                     for(File patchClassDir:patchClassDirs){
                         File classIdsFile = new File(patchClassDir, CLASS_ID_TXT);
                         DexClassIdResolve.dumpDexClassIds(dumpCmdPath, baseDexDir, patchClassDir, classIdsFile)
                     }
                 }else{
-                    File patchClassDir = dirBuilder.getClassOutDir(variant);
+                    File patchClassDir = creator.getClassOutDir(variant);
                     File classIdsFile = new File(patchClassDir, CLASS_ID_TXT);
                     DexClassIdResolve.dumpDexClassIds(dumpCmdPath, baseDexDir, patchClassDir, classIdsFile)
                 }
@@ -130,18 +135,9 @@ public class QFixPlugin implements Plugin<Project> {
             //将改变的类打成一个dex
             def hotfixPatch = "assemble${variant.name.capitalize()}Patch"
             def hotfixPatchTask = project.task(hotfixPatch) << {
-                if (dirBuilder.isSplit()) {
-                    File[] patchClassDirs = dirBuilder.getPatchClassDirs(variant);
-                    for (File patchClassDir : patchClassDirs) {
-                        File patchFile = new File(patchOutDir, String.format(Locale.ENGLISH, SPLIT_PATCH_FORMAT, HotFixPlugin.PATCH_NAME, patchClassDir.name));
-                        String pathFilePath = patchFile.absolutePath;
-                        AndroidUtils.dex(project, patchClassDir, dirBuilder.sdkDir, pathFilePath)
-                    }
-                } else {
-                    File patchFile = new File(patchOutDir, HotFixPlugin.PATCH_NAME + ".apk");
-                    String pathFilePath = patchFile.absolutePath;
-                    AndroidUtils.dex(project, dirBuilder.getClassOutDir(variant), dirBuilder.sdkDir, pathFilePath)
-                }
+                File patchFile = new File(patchOutDir, PATCH_NAME + ".apk");
+                String pathFilePath = patchFile.absolutePath;
+                AndroidUtils.dex(project, creator.getClassOutDir(variant), creator.sdkDir, pathFilePath)
             }
             hotfixPatchTask.dependsOn diffClassBeforeDexTask
         }
@@ -149,9 +145,10 @@ public class QFixPlugin implements Plugin<Project> {
         //在dexTask执行之前 保存所有类的sha值
         def shaClassBeforeDex = "shaClassBeforeDex${variant.name.capitalize()}"
         def shaClassBeforeDexTask = project.task(shaClassBeforeDex) << {
+            def baseOutDir = creator.getBaseOutDir(variant);
             //补丁准备工作
-            if (!patchOutDir.exists()) patchOutDir.mkdirs()
-            def hashFile = dirBuilder.getHashOutFile(variant)
+            if (!baseOutDir.exists()) baseOutDir.mkdirs()
+            def hashFile = creator.getHashOutFile(variant)
             if (!hashFile.exists()) {
                 hashFile.createNewFile()
             }
@@ -160,13 +157,13 @@ public class QFixPlugin implements Plugin<Project> {
             inputFiles.each {
                 inputFile ->
                     if (inputFile.path.endsWith(".jar")) {
-                        shaJarInfo(inputFile, dirBuilder.excluder, hashFile)
+                        shaJarInfo(inputFile, creator.patchSetting, hashFile)
                     }
             }
             //备份构建过程中的mapping.txt
             if (proguardTask) {
                 def mapFile = new File("${project.buildDir}/outputs/mapping/${variant.dirName}/mapping.txt")
-                def newMapFile = dirBuilder.getMappingOutFile(variant);
+                def newMapFile = creator.getMappingOutFile(variant);
                 Utils.copyFile(mapFile, newMapFile)
             }
         }
@@ -198,24 +195,19 @@ public class QFixPlugin implements Plugin<Project> {
         if(!basePatchClassDir.exists()) basePatchClassDir.mkdirs();
         if (jarFile && jarFile.isFile()) {
             def file = new JarFile(jarFile);
-            builder.excluder.addApplicationAndSuper(file,variant);
+            builder.patchSetting.addApplicationAndSuper(file,variant);
             SubClsFinder finder = new SubClsFinder(builder.strictMode);
             Enumeration enumeration = file.entries();
             while (enumeration.hasMoreElements()) {
                 JarEntry jarEntry = (JarEntry) enumeration.nextElement();
                 String entryName = jarEntry.getName();
                 InputStream inputStream = file.getInputStream(jarEntry);
-                if (!builder.excluder.isExcluded(entryName)) {
+                if (!builder.patchSetting.isExcluded(entryName)) {
                     def bytes = Utils.readAllBytesAndClose(inputStream);
                     def hash = DigestUtils.shaHex(bytes)
                     if (Utils.notSame(hashMap, entryName, hash)) {
                         finder.addAbsPatchClass(bytes, entryName)
-                        if(builder.isSplit()){
-                            File patchClassDir = new File(basePatchClassDir,builder.getClassModule(entryName,variant));
-                            Utils.copyBytesToFile(bytes, Utils.touchFile(patchClassDir, entryName))
-                        }else{
-                            Utils.copyBytesToFile(bytes, Utils.touchFile(basePatchClassDir, entryName))
-                        }
+                        Utils.copyBytesToFile(bytes, Utils.touchFile(basePatchClassDir, entryName))
                     } else {
                         finder.addOutPatchClass(bytes, entryName)
                     }
@@ -226,12 +218,7 @@ public class QFixPlugin implements Plugin<Project> {
                 ZipEntry zipEntry = file.getJarEntry(entryName);
                 InputStream inputStream = file.getInputStream(zipEntry);
                 def bytes = Utils.readAllBytesAndClose(inputStream);
-                if(builder.isSplit()){
-                    File patchClassDir = new File(basePatchClassDir,builder.getClassModule(entryName,variant));
-                    Utils.copyBytesToFile(bytes, Utils.touchFile(patchClassDir, entryName))
-                }else{
-                    Utils.copyBytesToFile(bytes, Utils.touchFile(basePatchClassDir, entryName))
-                }
+                Utils.copyBytesToFile(bytes, Utils.touchFile(basePatchClassDir, entryName))
                 inputStream.close();
             }
             file.close();

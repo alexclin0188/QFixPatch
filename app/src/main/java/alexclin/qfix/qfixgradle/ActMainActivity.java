@@ -2,6 +2,7 @@ package alexclin.qfix.qfixgradle;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.widget.TextView;
 
 public class ActMainActivity extends Activity {
 
@@ -9,5 +10,7 @@ public class ActMainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.act_main);
+        TextView tv = (TextView) findViewById(R.id.tv_test);
+        tv.setText("Origin Version");
     }
 }

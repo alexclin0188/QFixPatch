@@ -20,5 +20,6 @@ public class AppDelegate extends ApplicationLike {
     public void onCreate() {
         super.onCreate();
         Log.d("AppDelegate","You can do real Application logic here");
+        Log.e("AppDelegate","Test log bug origin-----");
     }
 }
