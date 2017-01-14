@@ -2,6 +2,7 @@ package alexclin.qfix.util
 
 import com.android.SdkConstants
 import com.android.build.gradle.api.BaseVariant
+import com.android.builder.model.SigningConfig
 import org.apache.commons.io.FileUtils
 import com.google.common.collect.Sets
 import org.apache.tools.ant.taskdefs.condition.Os
@@ -144,6 +145,22 @@ public class AndroidUtils {
             return "${project.buildDir}/intermediates/transforms/dex/${variant.name}/folders/1000/1f/main"
         } else {
             return "${project.buildDir}/intermediates/${variant.name}"
+        }
+    }
+
+    static boolean signApk(File originFile,File outFile,SigningConfig signingConfig){
+        def cmd = "jarsigner -verbose -keystore ${signingConfig.storeFile.absolutePath} -signedjar " +
+                "${outFile.absolutePath} ${originFile.absolutePath} ${signingConfig.keyAlias} -storepass ${signingConfig.storePassword} " +
+                "-keypass ${signingConfig.keyPassword}"
+        Process process = Runtime.getRuntime().exec(cmd)
+        def stdout = new ByteArrayOutputStream()
+        stdout << process.getErrorStream()
+        def error = stdout.toString().trim()
+        if (error) {
+            println error
+            return false;
+        }else{
+            return true;
         }
     }
 }

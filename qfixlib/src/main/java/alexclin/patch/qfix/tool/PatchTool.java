@@ -65,16 +65,20 @@ public class PatchTool {
     }
 
 	public static void installPatch(Application application,File patchFile){
-		installPatch(application,patchFile,DEFAULT_ENTRANCE);
+		installPatch(application,patchFile,DEFAULT_ENTRANCE,true);
 	}
 
-	public static void installPatch(Application application,File patchFile,String defaultEntranceClass){
+	public static void installPatch(Application application,File patchFile,String defaultEntranceClass,boolean checkSign){
 		if(application==null||patchFile==null){
 			Log.e(TAG,"Invalid parameters with context:"+application+",patchFile:"+patchFile+",entranceClass:"+defaultEntranceClass);
 			return;
 		}
 		if(!patchFile.exists()){
 			Log.e(TAG,"PatchFile:"+patchFile+" not exists");
+			return;
+		}
+		if(checkSign&&!ApkChecker.verifyApk(application,patchFile)){
+			Log.e(TAG,"Patch file signature is not same to current Application apk file, give up to install patch file:"+patchFile);
 			return;
 		}
 		List<Pair<String,Long>> classIds = readPatchClassIds(patchFile,defaultEntranceClass);

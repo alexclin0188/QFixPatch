@@ -4,6 +4,7 @@ import alexclin.qfix.util.AndroidUtils
 import alexclin.qfix.util.Utils
 import com.android.build.gradle.AppPlugin
 import com.android.build.gradle.api.BaseVariant
+import com.android.builder.model.SigningConfig
 import org.apache.commons.codec.digest.DigestUtils
 import org.apache.commons.io.FileUtils
 import org.gradle.api.DefaultTask
@@ -136,7 +137,13 @@ public class QFixPlugin implements Plugin<Project> {
                 File patchFile = new File(patchOutDir, PATCH_NAME + "_${project.name}-${variant.dirName}-unsigned.apk");
                 String pathFilePath = patchFile.absolutePath;
                 AndroidUtils.dex(project, creator.getClassOutDir(variant), creator.sdkDir, pathFilePath)
-                //TODO 签名补丁
+                //签名补丁
+                SigningConfig signingConfig = variant.signingConfig;
+                if(signingConfig!=null){
+                    File patchSignedFile = new File(patchOutDir, PATCH_NAME + "_${project.name}-${variant.dirName}.apk")
+                    if (AndroidUtils.signApk(patchFile, patchSignedFile, signingConfig))
+                        patchFile.delete();
+                }
             }
             hotfixPatchTask.dependsOn diffClassBeforeDexTask
         }
