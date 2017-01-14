@@ -1,0 +1,64 @@
+apply plugin: 'com.android.library'
+apply from: '../config.gradle'
+
+android {
+    compileSdkVersion project.ext.compileSdkVersion
+    buildToolsVersion project.ext.buildToolsVersion
+
+    defaultConfig {
+        minSdkVersion project.ext.minSdkVersion
+        targetSdkVersion project.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+
+        ndk {
+            moduleName "HFPatch"
+            abiFilters "armeabi", "armeabi-v7a", "x86"
+            stl "stlport_shared"
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    lintOptions {
+        abortOnError false
+    }
+
+    sourceSets.main.jni.srcDirs = [] //disable automatic ndk-build call
+
+    if(project.ext.buildJniCode){
+        tasks.withType(JavaCompile) {
+            compileTask ->
+                compileTask.dependsOn copySoRelease
+                compileTask.dependsOn copySoDebug
+        }
+    }
+
+    task copySoRelease(type: Copy, dependsOn: 'ndkBuild'){
+        from(new File(buildDir, 'libs')) { include '**/*.so' }
+        into(new File(buildDir, 'intermediates/jniLibs/release'))
+    }
+
+    task copySoDebug(type: Copy, dependsOn: 'ndkBuild'){
+        from(new File(buildDir, 'libs')) { include '**/*.so' }
+        into(new File(buildDir, 'intermediates/jniLibs/debug'))
+    }
+
+    task ndkBuild(type: Exec) {
+        def ndkDir = plugins.getPlugin('com.android.library').sdkHandler.ndkFolder
+        println(ndkDir)
+        commandLine "$ndkDir/ndk-build",
+                'NDK_PROJECT_PATH=build',
+                'APP_BUILD_SCRIPT=src/main/jni/Android.mk',
+                'NDK_APPLICATION_MK=src/main/jni/Application.mk',
+                '--debug'
+    }
+    buildToolsVersion '25.0.2'
+}
+
+dependencies {
+    compile project.ext.androidSupportAnnotation
+}
