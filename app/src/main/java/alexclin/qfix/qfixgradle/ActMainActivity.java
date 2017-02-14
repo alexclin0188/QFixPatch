@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
 
+import alexclin.patch.qfix.tool.PatchTool;
 import alexclin.qfix.qfixgradle.bug.TestActivity;
 
 public class ActMainActivity extends Activity {
@@ -24,5 +25,11 @@ public class ActMainActivity extends Activity {
                 startActivity(new Intent(view.getContext(), TestActivity.class));
             }
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        PatchTool.killSelfApp(this);
     }
 }

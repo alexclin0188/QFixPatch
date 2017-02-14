@@ -3,321 +3,318 @@ package alexclin.patch.qfix.tool;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Application;
+import android.content.Context;
 import android.os.Build;
-import android.text.TextUtils;
 import android.util.Log;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.zip.ZipFile;
 
-import dalvik.system.DexClassLoader;
+import dalvik.system.DexFile;
 import dalvik.system.PathClassLoader;
 
 class InjectUtil {
 
 	private static final String TAG = "InjectUtil";
 
-	public static boolean inject(Application context, File patchFile) {
-        //用来调用ClassLoader.loadClass()方法的参数，暂时设为空，不加载任何类，有异常可尝试修改此参数
-		String loadClazz = "";
-		try {
-			Class.forName("dalvik.system.LexClassLoader");
-			return injectInAliyunOs(context, patchFile.getAbsolutePath(), loadClazz, true);
-		} catch (ClassNotFoundException e1) {
-			ClassLoader loader = context.getClassLoader();
-			try {
-				Class.forName("dalvik.system.BaseDexClassLoader");
-				return injectBelowApiLevel14(context,loader, patchFile.getAbsolutePath(), loadClazz, true);
-			} catch (ClassNotFoundException e2) {
-				return injectAboveEqualApiLevel14(context,loader, patchFile.getAbsolutePath(), loadClazz, true);
+	static boolean injectDex(Application context, File patchFile) {
+        ArrayList<File> files = new ArrayList<>();
+        files.add(patchFile);
+        try {
+			checkApkFiles(files);
+            if(isAliyunOs()){
+                for(File file:files){
+                    injectLexFile(context,file);
+                }
+                return true;
+            }else if(isAndroid()){
+                installDex(context,InjectUtil.class.getClassLoader(),context.getDir("dex", 0),files);
+                return true;
+            }
+            throw new IllegalStateException("Current system is not support");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+	static boolean unloadPatchElement(Application app, int index) {
+		if(isAliyunOs()){
+			return unloadLexElement(app,index);
+		}else if(isAndroid()){
+			if(Build.VERSION.SDK_INT>= Build.VERSION_CODES.ICE_CREAM_SANDWICH){
+				return unloadDexAboveEqualApiLevel14(app,index);
+			}else{
+				return unloadDexBelowApiLevel14(app,index);
 			}
 		}
+		return false;
 	}
 
-	private static boolean injectInAliyunOs(Application app,String libPath, String fooClass, boolean isAppend) {
-		PathClassLoader localClassLoader = (PathClassLoader) app.getClassLoader();
-		new DexClassLoader(libPath, app.getDir("dex", 0).getAbsolutePath(), libPath, localClassLoader);
-		String lexFileName = new File(libPath).getName();
-		lexFileName = lexFileName.replaceAll("\\.[a-zA-Z0-9]+", ".lex");
-		try {
-			Class<?> classLexClassLoader = Class.forName("dalvik.system.LexClassLoader");
-			Constructor<?> constructorLexClassLoader = classLexClassLoader
-					.getConstructor(String.class, String.class, String.class, ClassLoader.class);
-			Object localLexClassLoader = constructorLexClassLoader.newInstance(
-					app.getDir("dex", 0).getAbsolutePath() + File.separator
-							+ lexFileName, app.getDir("dex", 0).getAbsolutePath(), libPath, localClassLoader);
-			Method methodLoadClass = classLexClassLoader.getMethod("loadClass",
-					String.class);
-			if (!TextUtils.isEmpty(fooClass)) {
-				methodLoadClass.invoke(localLexClassLoader, fooClass);
-			}
-			setField(
-					localClassLoader,
-					PathClassLoader.class,
-					"mPaths",
-					appendArray(
-							getField(localClassLoader, PathClassLoader.class,
-									"mPaths"),
-							getField(localLexClassLoader, classLexClassLoader,
-									"mRawDexPath"), isAppend));
-			setField(
-					localClassLoader,
-					PathClassLoader.class,
-					"mFiles",
-					combineArray(
-							getField(localClassLoader, PathClassLoader.class,
-									"mFiles"),
-							getField(localLexClassLoader, classLexClassLoader,
-									"mFiles"), isAppend));
-			setField(
-					localClassLoader,
-					PathClassLoader.class,
-					"mZips",
-					combineArray(
-							getField(localClassLoader, PathClassLoader.class,
-									"mZips"),
-							getField(localLexClassLoader, classLexClassLoader,
-									"mZips"), isAppend));
-			setField(
-					localClassLoader,
-					PathClassLoader.class,
-					"mLexs",
-					combineArray(
-							getField(localClassLoader, PathClassLoader.class,
-									"mLexs"),
-							getField(localLexClassLoader, classLexClassLoader,
-									"mDexs"), isAppend));
-			return true;
-		} catch (Throwable t) {
-			t.printStackTrace();
-			return false;
-		}
-
-	}
-
-	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
-	private static boolean injectBelowApiLevel14(Application app,ClassLoader classLoader, String libPath, String fooClass, boolean isAppend) {
-		PathClassLoader pathClassLoader = (PathClassLoader) classLoader;
-		DexClassLoader dexClassLoader = new DexClassLoader(libPath, app.getDir("dex", 0).getAbsolutePath(), libPath, app.getClassLoader());
-
-		try {
-			/*if (Build.VERSION.SDK_INT <= 8) {
-				Method ensureInitMethod = dexClassLoader.getClass().getDeclaredMethod("ensureInit");
-				ensureInitMethod.setAccessible(true);
-				ensureInitMethod.invoke(dexClassLoader);
-			}*/
-			if (!TextUtils.isEmpty(fooClass)) {
-				dexClassLoader.loadClass(fooClass);
-			}
-			setField(
-					pathClassLoader,
-					PathClassLoader.class,
-					"mPaths",
-					appendArray(
-							getField(pathClassLoader, PathClassLoader.class,
-									"mPaths"),
-							getField(dexClassLoader, DexClassLoader.class,
-									"mRawDexPath"), isAppend));
-			setField(
-					pathClassLoader,
-					PathClassLoader.class,
-					"mFiles",
-					combineArray(
-							getField(pathClassLoader, PathClassLoader.class,
-									"mFiles"),
-							getField(dexClassLoader, DexClassLoader.class,
-									"mFiles"), isAppend));
-			setField(
-					pathClassLoader,
-					PathClassLoader.class,
-					"mZips",
-					combineArray(
-							getField(pathClassLoader, PathClassLoader.class,
-									"mZips"),
-							getField(dexClassLoader, DexClassLoader.class,
-									"mZips"), isAppend));
-			setField(
-					pathClassLoader,
-					PathClassLoader.class,
-					"mDexs",
-					combineArray(
-							getField(pathClassLoader, PathClassLoader.class,
-									"mDexs"),
-							getField(dexClassLoader, DexClassLoader.class,
-									"mDexs"), isAppend));
-			return true;
-		} catch (Throwable e) {
-			Log.d(TAG, "InjectUtil injectBelowApiLevel14 Throwable=" + e);
-			e.printStackTrace();
-			return false;
-		}
-	}
-
-	@SuppressLint("NewApi")
-	private static boolean injectAboveEqualApiLevel14(Application app,ClassLoader loader,
-													  String libPath, String fooClass, boolean isAppend) {
-		try {
-			if (Build.VERSION.SDK_INT >= 24) {
-				loader = AndroidNClassLoader.inject((PathClassLoader) loader, app);
-			}
-			PathClassLoader pathClassLoader = (PathClassLoader) loader;
-			DexClassLoader dexClassLoader = new DexClassLoader(libPath, app.getDir("dex", 0).getAbsolutePath(), libPath, app.getClassLoader());
-			if (!TextUtils.isEmpty(fooClass)) {
-				dexClassLoader.loadClass(fooClass);
-			}
-			Object dexElements = combineArray(
-					getDexElements(getPathList(pathClassLoader)),
-					getDexElements(getPathList(dexClassLoader)), isAppend);
-			Object pathList = getPathList(pathClassLoader);
-			setField(pathList, pathList.getClass(), "dexElements", dexElements);
-			return true;
-		} catch (Throwable e) {
-			Log.d(TAG, "InjectUtil injectAboveEqualApiLevel14 Throwable=" + e);
-			return false;
-		}
-	}
-
-	private static Object getPathList(Object baseDexClassLoader)
-			throws IllegalArgumentException, NoSuchFieldException,
-			IllegalAccessException, ClassNotFoundException {
-		return getField(baseDexClassLoader, Class.forName("dalvik.system.BaseDexClassLoader"), "pathList");
-	}
-
-	private static Object getDexElements(Object paramObject)
-			throws IllegalArgumentException, NoSuchFieldException,
-			IllegalAccessException {
-		return getField(paramObject, paramObject.getClass(), "dexElements");
-	}
-
-	private static Object getField(Object obj, Class<?> cl, String field)
-			throws NoSuchFieldException, IllegalArgumentException,
-			IllegalAccessException {
-		Field localField = cl.getDeclaredField(field);
-		localField.setAccessible(true);
-		return localField.get(obj);
-	}
-
-	private static void setField(Object obj, Class<?> cl, String field,
-								 Object value) throws NoSuchFieldException,
-			IllegalArgumentException, IllegalAccessException {
-		Field localField = cl.getDeclaredField(field);
-		localField.setAccessible(true);
-		localField.set(obj, value);
-	}
-
-	private static Object combineArray(Object arrayLhs, Object arrayRhs, boolean isAppend) {
-		Class<?> localClass = arrayLhs.getClass().getComponentType();
-		int lenLhs = Array.getLength(arrayLhs);
-		int lenRhs = Array.getLength(arrayRhs);
-		int i = isAppend ? lenLhs : lenRhs;
-		int j = i + (isAppend ? lenRhs : lenLhs);
-		Object result = Array.newInstance(localClass, j);
-		for (int k = 0; k < j; ++k) {
-			if (k < i) {
-				Array.set(result, k, Array.get((isAppend ? arrayLhs : arrayRhs), k));
-			} else {
-				Array.set(result, k, Array.get((isAppend ? arrayRhs : arrayLhs), k - i));
-			}
-		}
-		return result;
-	}
-
-	private static Object appendArray(Object array, Object value, boolean isAppend) {
-		Class<?> localClass = array.getClass().getComponentType();
-		int lenArray = Array.getLength(array);
-		int i = isAppend ? lenArray : 1;
-		int j = i + (isAppend ? 1 : lenArray);
-		Object localObject = Array.newInstance(localClass, j);
-		for (int k = 0; k < j; ++k) {
-			if (k < i) {
-				Array.set(localObject, k, (isAppend ? Array.get(array, k) : value));
-			} else {
-				Array.set(localObject, k, (isAppend ? value : Array.get(array, k - i)));
-			}
-		}
-		return localObject;
-	}
-
-	public static boolean unloadDexElement(Application app, int index) {
-		try {
-			Class.forName("dalvik.system.LexClassLoader");
-			return unloadDexInAliyunOs(app, index);
-		} catch (ClassNotFoundException e) {
-		}
-		boolean hasBaseDexClassLoader = true;
+	private static boolean isAndroid() {
 		try {
 			Class.forName("dalvik.system.BaseDexClassLoader");
+			return true;
 		} catch (ClassNotFoundException e) {
-			hasBaseDexClassLoader = false;
-		}
-		if (!hasBaseDexClassLoader) {
-			return unloadDexBelowApiLevel14(app, index);
-		} else {
-			return unloadDexAboveEqualApiLevel14(app, index);
+			return false;
 		}
 	}
 
-	private static boolean unloadDexInAliyunOs(Application app, int index) {
-		PathClassLoader localClassLoader = (PathClassLoader) app.getClassLoader();
-		try {
-			setField(
-					localClassLoader,
-					PathClassLoader.class,
-					"mPaths",
-					removeElementFromArray(getField(localClassLoader, PathClassLoader.class, "mPaths"), index));
+	private static void checkApkFiles(List<File> files) throws IOException {
+		for (File file:files){
+			if(!file.exists()||!file.getName().endsWith(".apk")){
+				throw new IOException("un support file:"+file);
+			}
+		}
+	}
 
-			setField(
-					localClassLoader,
-					PathClassLoader.class,
-					"mFiles",
-					removeElementFromArray(getField(localClassLoader, PathClassLoader.class, "mFiles"), index));
-			setField(
-					localClassLoader,
-					PathClassLoader.class,
-					"mZips",
-					removeElementFromArray(getField(localClassLoader, PathClassLoader.class, "mZips"), index));
-			setField(
-					localClassLoader,
-					PathClassLoader.class,
-					"mLexs",
-					removeElementFromArray(getField(localClassLoader, PathClassLoader.class, "mLexs"), index));
-			return true;
-		} catch (Throwable t) {
-			t.printStackTrace();
-			return false;
+	private static void installDex(Application application, ClassLoader loader, File dexDir, List<File> files)
+			throws Exception {
+		if(!dexDir.exists()){
+			dexDir.mkdirs();
+		}
+		if (!files.isEmpty()) {
+			if (Build.VERSION.SDK_INT >= 24) {
+				loader = AndroidNClassLoader.inject((PathClassLoader) loader, application);
+			}
+
+			if (Build.VERSION.SDK_INT >= 23) {
+				V23.install(loader, files, dexDir);
+			} else if (Build.VERSION.SDK_INT >= 19) {
+				V19.install(loader, files, dexDir);
+			} else if (Build.VERSION.SDK_INT >= 14) {
+				V14.install(loader, files, dexDir);
+			} else {
+				V4.install(loader, files);
+			}
+		}
+	}
+
+	private static final class V23 {
+
+		private static void install(ClassLoader loader, List<File> additionalClassPathEntries,
+									File optimizedDirectory)
+				throws IllegalArgumentException, IllegalAccessException,
+				NoSuchFieldException, InvocationTargetException, NoSuchMethodException, IOException {
+            /* The patched class loader is expected to be a descendant of
+             * dalvik.system.BaseDexClassLoader. We modify its
+             * dalvik.system.DexPathList pathList field to append additional DEX
+             * file entries.
+             */
+			Object dexPathList = ReflectUtil.getField(loader, "pathList");
+			ArrayList<IOException> suppressedExceptions = new ArrayList<IOException>();
+            ReflectUtil.expandFieldArray(dexPathList, "dexElements", makePathElements(dexPathList,
+					new ArrayList<File>(additionalClassPathEntries), optimizedDirectory,
+					suppressedExceptions),true);
+			if (suppressedExceptions.size() > 0) {
+				for (IOException e : suppressedExceptions) {
+					Log.w(TAG, "Exception in makePathElement", e);
+					throw e;
+				}
+			}
 		}
 
+		/**
+		 * A wrapper around
+		 * {@code private static final dalvik.system.DexPathList#makePathElements}.
+		 */
+		private static Object[] makePathElements(
+				Object dexPathList, ArrayList<File> files, File optimizedDirectory,
+				ArrayList<IOException> suppressedExceptions)
+				throws IllegalAccessException, InvocationTargetException, NoSuchMethodException {
+
+			Method makePathElements;
+			try {
+				makePathElements = ReflectUtil.findMethod(dexPathList, "makePathElements", List.class, File.class,
+						List.class);
+			} catch (NoSuchMethodException e) {
+				Log.e(TAG, "NoSuchMethodException: makePathElements(List,File,List) failure");
+				try {
+					makePathElements = ReflectUtil.findMethod(dexPathList, "makePathElements", ArrayList.class, File.class, ArrayList.class);
+				} catch (NoSuchMethodException e1) {
+					Log.e(TAG, "NoSuchMethodException: makeDexElements(ArrayList,File,ArrayList) failure");
+					try {
+						Log.e(TAG, "NoSuchMethodException: try use v19 instead");
+						return V19.makeDexElements(dexPathList, files, optimizedDirectory, suppressedExceptions);
+					} catch (NoSuchMethodException e2) {
+						Log.e(TAG, "NoSuchMethodException: makeDexElements(List,File,List) failure");
+						throw e2;
+					}
+				}
+			}
+
+			return (Object[]) makePathElements.invoke(dexPathList, files, optimizedDirectory, suppressedExceptions);
+		}
+	}
+
+	/**
+	 * Installer for platform versions 19.
+	 */
+	private static final class V19 {
+
+		private static void install(ClassLoader loader, List<File> additionalClassPathEntries,
+									File optimizedDirectory)
+				throws IllegalArgumentException, IllegalAccessException,
+				NoSuchFieldException, InvocationTargetException, NoSuchMethodException {
+            /* The patched class loader is expected to be a descendant of
+             * dalvik.system.BaseDexClassLoader. We modify its
+             * dalvik.system.DexPathList pathList field to append additional DEX
+             * file entries.
+             */
+//			Field pathListField = ReflectUtil.findField(loader, "pathList");
+//			Object dexPathList = pathListField.get(loader);
+            Object dexPathList = ReflectUtil.getField(loader,"pathList");
+			ArrayList<IOException> suppressedExceptions = new ArrayList<IOException>();
+			Object[] extraElements = makeDexElements(dexPathList,
+					new ArrayList<File>(additionalClassPathEntries), optimizedDirectory,
+					suppressedExceptions);
+            ReflectUtil.expandFieldArray(dexPathList, "dexElements", extraElements, true);
+			if (suppressedExceptions.size() > 0) {
+				for (IOException e : suppressedExceptions) {
+					Log.e(TAG,"Exception in makeDexElement", e);
+				}
+                IOException[] dexElementsSuppressedExceptions = (IOException[])ReflectUtil.getField(loader,"dexElementsSuppressedExceptions");
+				if (dexElementsSuppressedExceptions == null) {
+					dexElementsSuppressedExceptions =
+							suppressedExceptions.toArray(
+									new IOException[suppressedExceptions.size()]);
+				} else {
+					IOException[] combined =
+							new IOException[suppressedExceptions.size() +
+									dexElementsSuppressedExceptions.length];
+					suppressedExceptions.toArray(combined);
+					System.arraycopy(dexElementsSuppressedExceptions, 0, combined,
+							suppressedExceptions.size(), dexElementsSuppressedExceptions.length);
+					dexElementsSuppressedExceptions = combined;
+				}
+
+                ReflectUtil.setField(loader,"dexElementsSuppressedExceptions",dexElementsSuppressedExceptions);
+			}
+		}
+
+		/**
+		 * A wrapper around
+		 * {@code private static final dalvik.system.DexPathList#makeDexElements}.
+		 */
+		private static Object[] makeDexElements(
+				Object dexPathList, ArrayList<File> files, File optimizedDirectory,
+				ArrayList<IOException> suppressedExceptions)
+				throws IllegalAccessException, InvocationTargetException,
+				NoSuchMethodException {
+			Method makeDexElements =
+                    ReflectUtil.findMethod(dexPathList, "makeDexElements", ArrayList.class, File.class,
+							ArrayList.class);
+
+			return (Object[]) makeDexElements.invoke(dexPathList, files, optimizedDirectory,
+					suppressedExceptions);
+		}
+	}
+
+	/**
+	 * Installer for platform versions 14, 15, 16, 17 and 18.
+	 */
+	private static final class V14 {
+		private static void install(ClassLoader loader, List<File> additionalClassPathEntries,
+									File optimizedDirectory)
+				throws IllegalArgumentException, IllegalAccessException,
+				NoSuchFieldException, InvocationTargetException, NoSuchMethodException {
+            /* The patched class loader is expected to be a descendant of
+             * dalvik.system.BaseDexClassLoader. We modify its
+             * dalvik.system.DexPathList pathList field to append additional DEX
+             * file entries.
+             */
+            Object dexPathList = ReflectUtil.getField(loader,"pathList");
+            ReflectUtil.expandFieldArray(dexPathList, "dexElements", makeDexElements(dexPathList,
+					new ArrayList<File>(additionalClassPathEntries), optimizedDirectory), true);
+		}
+
+		/**
+		 * A wrapper around
+		 * {@code private static final dalvik.system.DexPathList#makeDexElements}.
+		 */
+		private static Object[] makeDexElements(
+				Object dexPathList, ArrayList<File> files, File optimizedDirectory)
+				throws IllegalAccessException, InvocationTargetException,
+				NoSuchMethodException {
+			Method makeDexElements =
+                    ReflectUtil.findMethod(dexPathList, "makeDexElements", ArrayList.class, File.class);
+
+			return (Object[]) makeDexElements.invoke(dexPathList, files, optimizedDirectory);
+		}
+	}
+
+	/**
+	 * Installer for platform versions 4 to 13.
+	 */
+	private static final class V4 {
+		//支持直接加载多个
+		private static void install(ClassLoader loader, List<File> additionalClassPathEntries)
+				throws IllegalArgumentException, IllegalAccessException,
+				NoSuchFieldException, IOException {
+            /* The patched class loader is expected to be a descendant of
+             * dalvik.system.DexClassLoader. We modify its
+             * fields mPaths, mFiles, mZips and mDexs to append additional DEX
+             * file entries.
+             */
+			int extraSize = additionalClassPathEntries.size();
+
+//			Field pathField = ReflectUtil.findField(loader, "path");
+
+			StringBuilder path = new StringBuilder((String)ReflectUtil.getField(loader,"path"));
+			String[] extraPaths = new String[extraSize];
+			File[] extraFiles = new File[extraSize];
+			ZipFile[] extraZips = new ZipFile[extraSize];
+			DexFile[] extraDexs = new DexFile[extraSize];
+			for (ListIterator<File> iterator = additionalClassPathEntries.listIterator();
+				 iterator.hasNext(); ) {
+				File additionalEntry = iterator.next();
+				String entryPath = additionalEntry.getAbsolutePath();
+				path.append(':').append(entryPath);
+				int index = iterator.previousIndex();
+				extraPaths[index] = entryPath;
+				extraFiles[index] = additionalEntry;
+				extraZips[index] = new ZipFile(additionalEntry);
+				extraDexs[index] = DexFile.loadDex(entryPath, entryPath + ".dex", 0);
+			}
+
+            ReflectUtil.setField(loader,"path",path.toString());
+            ReflectUtil.expandFieldArray(loader, "mPaths", extraPaths, true);
+            ReflectUtil.expandFieldArray(loader, "mFiles", extraFiles, true);
+            ReflectUtil.expandFieldArray(loader, "mZips", extraZips, true);
+            ReflectUtil.expandFieldArray(loader, "mDexs", extraDexs, true);
+		}
 	}
 
 	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
-	private static boolean unloadDexBelowApiLevel14(Application app, int index) {
+	private static boolean unloadDexBelowApiLevel14(Context app, int index) {
 		PathClassLoader pathClassLoader = (PathClassLoader) app.getClassLoader();
 		try {
-			setField(
+			ReflectUtil.setField(
 					pathClassLoader,
 					PathClassLoader.class,
 					"mPaths",
-					removeElementFromArray(getField(pathClassLoader, PathClassLoader.class, "mPaths"), index));
-			setField(
+					ReflectUtil.removeElementFromArray(ReflectUtil.getField(pathClassLoader, PathClassLoader.class, "mPaths"), index));
+			ReflectUtil.setField(
 					pathClassLoader,
 					PathClassLoader.class,
 					"mFiles",
-					removeElementFromArray(getField(pathClassLoader, PathClassLoader.class, "mFiles"), index));
-			setField(
+					ReflectUtil.removeElementFromArray(ReflectUtil.getField(pathClassLoader, PathClassLoader.class, "mFiles"), index));
+			ReflectUtil.setField(
 					pathClassLoader,
 					PathClassLoader.class,
 					"mZips",
-					removeElementFromArray(getField(pathClassLoader, PathClassLoader.class, "mZips"), index));
-			setField(
+					ReflectUtil.removeElementFromArray(ReflectUtil.getField(pathClassLoader, PathClassLoader.class, "mZips"), index));
+			ReflectUtil.setField(
 					pathClassLoader,
 					PathClassLoader.class,
 					"mDexs",
-					removeElementFromArray(getField(pathClassLoader, PathClassLoader.class, "mDexs"), index));
+					ReflectUtil.removeElementFromArray(ReflectUtil.getField(pathClassLoader, PathClassLoader.class, "mDexs"), index));
 			return true;
 		} catch (Throwable e) {
 			e.printStackTrace();
@@ -326,12 +323,12 @@ class InjectUtil {
 	}
 
 	@SuppressLint("NewApi")
-	private static boolean unloadDexAboveEqualApiLevel14(Application app, int index) {
+	private static boolean unloadDexAboveEqualApiLevel14(Context app, int index) {
 		PathClassLoader pathClassLoader = (PathClassLoader) app.getClassLoader();
 		try {
-			Object dexElements = removeElementFromArray(getDexElements(getPathList(pathClassLoader)), index);
-			Object pathList = getPathList(pathClassLoader);
-			setField(pathList, pathList.getClass(), "dexElements", dexElements);
+			Object pathList = ReflectUtil.getField(pathClassLoader, Class.forName("dalvik.system.BaseDexClassLoader"), "pathList");
+			Object dexElements = ReflectUtil.removeElementFromArray(ReflectUtil.getField(pathList,pathList.getClass(),"dexElements"), index);
+			ReflectUtil.setField(pathList, pathList.getClass(), "dexElements", dexElements);
 			return true;
 		} catch (Throwable e) {
 			e = null;
@@ -339,19 +336,65 @@ class InjectUtil {
 		}
 	}
 
-	private static Object removeElementFromArray(Object array, int index) {
-		Class<?> localClass = array.getClass().getComponentType();
-		int len = Array.getLength(array);
-		if (index < 0 || index >= len) {
-			return array;
-		}
-		Object result = Array.newInstance(localClass, len - 1);
-		int i = 0;
-		for (int k = 0; k < len; ++k) {
-			if (k != index) {
-				Array.set(result, i++, Array.get(array, k));
-			}
-		}
-		return result;
-	}
+
+    private static boolean isAliyunOs() {
+        try {
+            Class.forName("dalvik.system.LexClassLoader");
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
+    private static void injectLexFile(Context ctx, File dexPath)
+            throws ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException,
+            InstantiationException, NoSuchFieldException {
+        PathClassLoader obj = (PathClassLoader) InjectUtil.class.getClassLoader();
+        String replaceAll = dexPath.getName().replaceAll("\\.[a-zA-Z0-9]+", ".lex");
+        Class cls = Class.forName("dalvik.system.LexClassLoader");
+        String ctxDexPath = ctx.getDir("dex", 0).getAbsolutePath();
+        Object newInstance =
+                cls.getConstructor(new Class[] {String.class, String.class, String.class, ClassLoader.class}).newInstance(
+                        new Object[] {ctxDexPath+ File.separator + replaceAll,ctxDexPath, dexPath, obj});
+        cls.getMethod("loadClass", new Class[] {String.class}).invoke(newInstance, new Object[] {"android.app.Application"});
+        ReflectUtil.setField(obj, "mPaths",
+                ReflectUtil.appendArray(ReflectUtil.getField(obj, "mPaths"), ReflectUtil.getField(newInstance, "mRawDexPath")));
+        ReflectUtil.setField(obj, "mFiles",
+                ReflectUtil.combineArray(ReflectUtil.getField(newInstance, "mFiles"), ReflectUtil.getField(obj, "mFiles")));
+        ReflectUtil.setField(obj, "mZips",
+                ReflectUtil.combineArray(ReflectUtil.getField(newInstance, "mZips"), ReflectUtil.getField(obj, "mZips")));
+        ReflectUtil.setField(obj, "mLexs",
+                ReflectUtil.combineArray(ReflectUtil.getField(newInstance, "mDexs"), ReflectUtil.getField(obj, "mLexs")));
+    }
+
+    private static boolean unloadLexElement(Context context, int index){
+        PathClassLoader localClassLoader = (PathClassLoader) context.getClassLoader();
+
+        try {
+            ReflectUtil.setField(localClassLoader,
+                    PathClassLoader.class,
+                    "mPaths",
+                    ReflectUtil.removeElementFromArray(ReflectUtil.getField(localClassLoader, PathClassLoader.class, "mPaths"), index));
+
+            ReflectUtil.setField(
+                    localClassLoader,
+                    PathClassLoader.class,
+                    "mFiles",
+                    ReflectUtil.removeElementFromArray(ReflectUtil.getField(localClassLoader, PathClassLoader.class, "mFiles"), index));
+            ReflectUtil.setField(
+                    localClassLoader,
+                    PathClassLoader.class,
+                    "mZips",
+                    ReflectUtil.removeElementFromArray(ReflectUtil.getField(localClassLoader, PathClassLoader.class, "mZips"), index));
+            ReflectUtil.setField(
+                    localClassLoader,
+                    PathClassLoader.class,
+                    "mLexs",
+                    ReflectUtil.removeElementFromArray(ReflectUtil.getField(localClassLoader, PathClassLoader.class, "mLexs"), index));
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 }

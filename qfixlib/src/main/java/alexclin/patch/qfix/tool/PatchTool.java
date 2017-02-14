@@ -1,7 +1,13 @@
 package alexclin.patch.qfix.tool;
 
+import android.app.ActivityManager;
+import android.app.AlarmManager;
 import android.app.Application;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
@@ -51,12 +57,12 @@ public class PatchTool {
 			sIsLibLoaded = loadPatchToolLib();
 		}
     	if (!sIsLibLoaded) {
-			boolean unloadResult = InjectUtil.unloadDexElement(app, 0);
+			boolean unloadResult = InjectUtil.unloadPatchElement(app, 0);
 			Log.d(TAG, "load lib failed, unload patch result=" + unloadResult);
 		} else {
 			int resolveResult = nativeResolvePatchClass(referrerClassList, classIdxList, size);
 			if (resolveResult != CODE_RESOLVE_PATCH_ALL_SUCCESS) {
-				boolean unloadResult = InjectUtil.unloadDexElement(app, 0);
+				boolean unloadResult = InjectUtil.unloadPatchElement(app, 0);
 				Log.d(TAG, "resolve patch class failed, unload patch result=" + unloadResult);
 			} else {
 				Log.d(TAG, "resolve patch class success");
@@ -94,7 +100,8 @@ public class PatchTool {
 			referrerClassList[i] = item.first;
 			classIdxList[i] = item.second;
 		}
-		boolean installSuc = InjectUtil.inject(application,patchFile);
+		boolean installSuc = InjectUtil.injectDex(application,patchFile);
+        Log.d(TAG,"install patch result:"+installSuc);
 		if(installSuc&&Build.VERSION.SDK_INT < 21){
 			resolvePatchClass(application,referrerClassList,classIdxList,size);
 		}
@@ -158,4 +165,23 @@ public class PatchTool {
 		}
 		return entrance;
 	}
+
+    public static void restartDelayed(Context ctx, long timeInMills){
+        final Intent intent = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        AlarmManager alarmManager = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        PendingIntent pi = PendingIntent.getActivity(ctx,0,intent,PendingIntent.FLAG_UPDATE_CURRENT);
+        alarmManager.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime()+timeInMills,pi);
+    }
+
+    public static void killSelfApp(Context ctx) {
+        ActivityManager _ActivityManager = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+        List<ActivityManager.RunningAppProcessInfo> list = _ActivityManager.getRunningAppProcesses();
+        for (ActivityManager.RunningAppProcessInfo info : list) {
+            if (info.uid == android.os.Process.myUid() && info.pid != android.os.Process.myPid()) {
+                android.os.Process.killProcess(info.pid);
+            }
+        }
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
 }

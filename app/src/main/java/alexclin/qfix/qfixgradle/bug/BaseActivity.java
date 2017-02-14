@@ -10,6 +10,6 @@ import android.app.Activity;
 
 public abstract class BaseActivity extends Activity {
     protected void appInfoBase(StringBuilder builder){
-        if(builder!=null) builder.append("\nbug msg from BaseActivity------");
+        if(builder!=null) builder.append("\nbug msg from BaseActivity------origin");
     }
 }
