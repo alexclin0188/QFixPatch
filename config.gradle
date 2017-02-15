@@ -1,5 +1,4 @@
 project.ext{
-    buildJniCode = false
     minifyEnabled = true
     compileSdkVersion = 25
     buildToolsVersion = "25.0.2"
