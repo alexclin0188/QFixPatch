@@ -3,6 +3,7 @@ package alexclin.patch.qfix.tool;
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.util.Log;
 
 import java.io.ByteArrayInputStream;
@@ -28,8 +29,8 @@ class ApkChecker {
      * @param path    Apk file
      * @return true if verify apk success
      */
-    public static boolean verifyApk(Context context, File path) {
-        PublicKey mPublicKey;
+    static boolean verifyApk(Context context, File path) {
+        PublicKey[] publicKeys;
         try {
             PackageManager pm = context.getPackageManager();
             String packageName = context.getPackageName();
@@ -37,11 +38,13 @@ class ApkChecker {
             PackageInfo packageInfo = pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
             CertificateFactory certFactory = CertificateFactory
                     .getInstance("X.509");
-            ByteArrayInputStream stream = new ByteArrayInputStream(
-                    packageInfo.signatures[0].toByteArray());
-            X509Certificate cert = (X509Certificate) certFactory
-                    .generateCertificate(stream);
-            mPublicKey = cert.getPublicKey();
+            publicKeys = new PublicKey[packageInfo.signatures.length];
+            for(int i = 0;i<packageInfo.signatures.length; i++){
+                ByteArrayInputStream stream = new ByteArrayInputStream(packageInfo.signatures[i].toByteArray());
+                X509Certificate cert = (X509Certificate) certFactory
+                        .generateCertificate(stream);
+                publicKeys[i] = cert.getPublicKey();
+            }
         } catch (Exception e) {
             Log.e("TAG","verifyApk", e);
             return false;
@@ -59,7 +62,10 @@ class ApkChecker {
             if (certs == null) {
                 return false;
             }
-            return check(path, certs, mPublicKey);
+            for(PublicKey key:publicKeys){
+                if(!check(path, certs, key)) return false;
+            }
+            return true;
         } catch (Exception e) {
             Log.e("TAG",path.getAbsolutePath(), e);
             return false;
@@ -94,14 +100,14 @@ class ApkChecker {
     }
 
     // verify the signature of the Apk
-    private static boolean check(File path, Certificate[] certs, PublicKey mPublicKey) {
+    private static boolean check(File path, Certificate[] certs, PublicKey publicKey) {
         if (certs.length > 0) {
             for (int i = certs.length - 1; i >= 0; i--) {
                 try {
-                    certs[i].verify(mPublicKey);
+                    certs[i].verify(publicKey);
                     return true;
                 } catch (Exception e) {
-                    Log.e("TAG",path.getAbsolutePath(), e);
+                    Log.e("TAG", path.getAbsolutePath(), e);
                 }
             }
         }
