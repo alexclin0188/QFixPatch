@@ -148,10 +148,12 @@ public class AndroidUtils {
         }
     }
 
-    static boolean signApk(File originFile,File outFile,SigningConfig signingConfig){
+    static boolean signApk(File originFile,File outFile,SigningConfig signingConfig,boolean compatible){
         def cmd = "jarsigner -verbose -keystore ${signingConfig.storeFile.absolutePath} -signedjar " +
                 "${outFile.absolutePath} ${originFile.absolutePath} ${signingConfig.keyAlias} -storepass ${signingConfig.storePassword} " +
                 "-keypass ${signingConfig.keyPassword}"
+        if(compatible)
+            cmd = cmd + " -digestalg SHA1 -sigalg MD5withRSA"
         Process process = Runtime.getRuntime().exec(cmd)
         def stdout = new ByteArrayOutputStream()
         stdout << process.getErrorStream()

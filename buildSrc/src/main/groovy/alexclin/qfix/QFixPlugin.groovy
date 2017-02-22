@@ -21,7 +21,6 @@ import java.util.zip.ZipEntry
 
 public class QFixPlugin implements Plugin<Project> {
     static final String CLASS_ID_TXT = "class-ids.txt"
-    static final String SPLIT_PATCH_FORMAT = "%s_%s.apk";
 
     static final String PATCH_NAME = "patch"
     static final String DEBUG = "debug"
@@ -104,14 +103,14 @@ public class QFixPlugin implements Plugin<Project> {
                     Utils.unZipFile(apkFile, creator.getDexOutDir(variant), ".dex");
                 }
                 if (!patchOutDir.exists()) patchOutDir.mkdirs()
-
+                SubClsFinder finder = new SubClsFinder(creator.strictMode);
                 //比较所有类与之前保存的sha值是否有差异，有差异则保存到patchClassDir
                 Set<File> inputFiles = AndroidUtils.getDexTaskInputFiles(project, variant, dexTask)
                 if (proguardTask) {
                     inputFiles.each {
                         inputFile ->
                             if (inputFile.path.endsWith(".jar")) {
-                                diffJar(inputFile, hashMap, creator, variant)
+                                diffJar(inputFile, hashMap, creator, variant, finder)
                             }
                     }
                 } else if (AndroidUtils.compareVersionName(Version.ANDROID_GRADLE_PLUGIN_VERSION, "2.2.3") > -1) {
@@ -120,13 +119,15 @@ public class QFixPlugin implements Plugin<Project> {
                     Set<File> jarAndDir = new HashSet<>(inputFiles)
                     jarAndDir.add(new File(project.buildDir, "intermediates/classes/${variant.dirName}"))
                     File combinedJar = combineJarAndDir(project, jarAndDir)
-                    diffJar(combinedJar, hashMap, creator, variant)
+                    diffJar(combinedJar, hashMap, creator, variant, finder)
                 }
+                def allRefPatchClasses = finder.getAllRefPatchClasses();
+                def appName = AndroidUtils.getApplication(variant.outputs.processManifest.manifestOutputFile[0]);
                 //增加dexDump处理，dump patch class ids
                 def dumpCmdPath = AndroidUtils.getDexDumpPath(project, creator.sdkDir);
                 File patchClassDir = creator.getClassOutDir(variant);
                 File classIdsFile = new File(patchClassDir, CLASS_ID_TXT);
-                DexClassIdResolve.dumpDexClassIds(dumpCmdPath, baseDexDir, patchClassDir, classIdsFile)
+                DexClassIdResolve.dumpDexClassIds(dumpCmdPath, baseDexDir, patchClassDir, classIdsFile,appName,allRefPatchClasses)
             }
             diffClassBeforeDexTask.dependsOn dexTask.taskDependencies.getDependencies(dexTask)
 
@@ -141,7 +142,10 @@ public class QFixPlugin implements Plugin<Project> {
                 SigningConfig signingConfig = variant.signingConfig;
                 if(signingConfig!=null){
                     File patchSignedFile = new File(patchOutDir, PATCH_NAME + "_${project.name}-${variant.dirName}.apk")
-                    if (AndroidUtils.signApk(patchFile, patchSignedFile, signingConfig))
+                    int minSdkVersion = project.android.defaultConfig.minSdkVersion.mApiLevel
+                    int compileSdkVersion = Integer.valueOf(project.android.compileSdkVersion.split('-')[1])
+                    def compatible = (minSdkVersion<=20&&compileSdkVersion>20)
+                    if (AndroidUtils.signApk(patchFile, patchSignedFile, signingConfig,compatible))
                         patchFile.delete();
                 }
             }
@@ -221,13 +225,12 @@ public class QFixPlugin implements Plugin<Project> {
         }
     }
 
-    static void diffJar(File jarFile, HashMap hashMap, Creator builder, BaseVariant variant) {
+    static void diffJar(File jarFile, HashMap hashMap, Creator builder, BaseVariant variant, SubClsFinder finder) {
         File basePatchClassDir = builder.getClassOutDir(variant);
         if (!basePatchClassDir.exists()) basePatchClassDir.mkdirs();
         if (jarFile && jarFile.isFile()) {
             def file = new JarFile(jarFile);
             builder.patchSetting.addApplicationAndSuper(file, variant);
-            SubClsFinder finder = new SubClsFinder(builder.strictMode);
             Enumeration enumeration = file.entries();
             while (enumeration.hasMoreElements()) {
                 JarEntry jarEntry = (JarEntry) enumeration.nextElement();

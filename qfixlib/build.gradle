@@ -15,7 +15,7 @@ android {
             cmake{
                 arguments '-DANDROID_PLATFORM=android-'+project.ext.minSdkVersion,
                         '-DANDROID_TOOLCHAIN=clang'
-                abiFilters 'armeabi-v7a','armeabi','x86'
+//                abiFilters 'armeabi-v7a','armeabi','x86'
             }
         }
     }

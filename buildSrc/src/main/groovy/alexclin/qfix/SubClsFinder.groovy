@@ -13,6 +13,8 @@ public class SubClsFinder extends ClassVisitor{
     private ArrayList<OutPatchClass> outPatchClasses;
     //补丁中的虚基类
     private HashSet<String> absPatchClasses;
+    //补丁中的所有类
+    private HashSet<String> allPatchClasses;
 
     private boolean strictMode;
 
@@ -25,6 +27,7 @@ public class SubClsFinder extends ClassVisitor{
         super(ASM4);
         outPatchClasses = new HashMap<>();
         absPatchClasses = new HashSet<>();
+        allPatchClasses = new HashSet<>();
         strictMode = strict;
         entryRefMap = new HashMap<>();
     }
@@ -40,7 +43,7 @@ public class SubClsFinder extends ClassVisitor{
             OutPatchClass opc = new OutPatchClass(entryName,toPath(superName),isAbstract);
             outPatchClasses.add(opc);
         }
-        if(strictMode) visitClassReader(cr);
+        visitClassReader(cr);
     }
 
     private static String toPath(String className){
@@ -56,14 +59,15 @@ public class SubClsFinder extends ClassVisitor{
         if(Modifier.isAbstract(cr.access)||strictMode){
             absPatchClasses.add(entryName);
         }
+        allPatchClasses.add(entryName);
     }
 
-    private Collection<String> getAbsPatchSubClasses(){
+    private Collection<String> getAbsPatchSubClasses(Set<String> absPatchClasses,boolean allowAll){
         HashSet<String> subClasses = new HashSet<>();
         for(OutPatchClass opc:outPatchClasses){
             if(absPatchClasses.contains(opc.superName)){
                 subClasses.add(opc.entryName);
-                if(opc.isAbstract){
+                if(opc.isAbstract||allowAll){
                     ArrayList<OutPatchClass> absSubs = getSubclasses(opc.entryName,subClasses);
                     //如果虚基类继承有很多层，这里会有stack overflow风险，
                     //但是连着很多层的虚基类继承，绝壁是代码写的有问题
@@ -196,8 +200,13 @@ public class SubClsFinder extends ClassVisitor{
     }
 
     public Collection<String> getRefClasses(){
-        Collection<String> collection = getAbsPatchSubClasses();
+        Collection<String> collection = getAbsPatchSubClasses(absPatchClasses,false);
         if(!strictMode) return collection;
         return searchRefPatchClass(absPatchClasses,collection);
+    }
+
+    public Collection<String> getAllRefPatchClasses(){
+        Collection<String> collection = getAbsPatchSubClasses(allPatchClasses,true);
+        return searchRefPatchClass(allPatchClasses,collection);
     }
 }

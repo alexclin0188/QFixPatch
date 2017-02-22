@@ -11,6 +11,12 @@ qfix{
     strictMode true //严格模式，用于解决ART下dex激进内联问题，详情参看README,可选
 }
 
+Properties localProperties = new Properties()
+rootProject.file('local.properties').withInputStream {
+    stream ->
+        localProperties.load(stream)
+}
+
 android {
     compileSdkVersion project.ext.compileSdkVersion
     buildToolsVersion project.ext.buildToolsVersion
@@ -22,10 +28,19 @@ android {
         versionCode 1
         versionName "1.0"
     }
+    signingConfigs{
+        release{
+            storeFile file(localProperties.getProperty('key.store.path'))
+            storePassword localProperties.getProperty('key.store.pass')
+            keyAlias localProperties.getProperty('key.alias.name')
+            keyPassword localProperties.getProperty('key.store.pass')
+        }
+    }
     buildTypes {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 }

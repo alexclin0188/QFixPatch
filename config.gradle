@@ -1,6 +1,6 @@
 project.ext{
     minifyEnabled = true
-    compileSdkVersion = 25
+    compileSdkVersion = 22
     buildToolsVersion = "25.0.2"
     minSdkVersion = 14
     targetSdkVersion = 19

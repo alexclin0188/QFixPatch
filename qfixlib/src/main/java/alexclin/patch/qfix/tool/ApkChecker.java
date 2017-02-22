@@ -57,7 +57,7 @@ class ApkChecker {
             if (null == jarEntry) {// no code
                 return false;
             }
-            loadDigestes(jarFile,jarEntry);
+            loadDigest(jarFile,jarEntry);
             Certificate[] certs = jarEntry.getCertificates();
             if (certs == null) {
                 return false;
@@ -80,7 +80,7 @@ class ApkChecker {
         }
     }
 
-    private static void loadDigestes(JarFile jarFile, JarEntry je) throws IOException {
+    private static void loadDigest(JarFile jarFile, JarEntry je) throws IOException {
         InputStream is = null;
         try {
             is = jarFile.getInputStream(je);

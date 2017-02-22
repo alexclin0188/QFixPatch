@@ -19,6 +19,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 
@@ -52,20 +53,24 @@ public class PatchTool {
 		}
 	}
     
-    private static void resolvePatchClass(Application app, String[] referrerClassList, long[] classIdxList, int size) {
+    private static boolean resolvePatchClass(Application app, String[] referrerClassList, long[] classIdxList, int size) {
     	if (!sIsLibLoaded) {
 			sIsLibLoaded = loadPatchToolLib();
 		}
     	if (!sIsLibLoaded) {
 			boolean unloadResult = InjectUtil.unloadPatchElement(app, 0);
-			Log.d(TAG, "load lib failed, unload patch result=" + unloadResult);
+			Log.e(TAG, "load lib failed, unload patch result=" + unloadResult);
+			return false;
 		} else {
 			int resolveResult = nativeResolvePatchClass(referrerClassList, classIdxList, size);
 			if (resolveResult != CODE_RESOLVE_PATCH_ALL_SUCCESS) {
 				boolean unloadResult = InjectUtil.unloadPatchElement(app, 0);
-				Log.d(TAG, "resolve patch class failed, unload patch result=" + unloadResult);
+				Log.e(TAG, String.format(Locale.ENGLISH,"resolve patch class failed, unload patch result= %b,refClass1:%s",
+						unloadResult,referrerClassList[0]));
+				return false;
 			} else {
 				Log.d(TAG, "resolve patch class success");
+				return true;
 			}
 		}
     }
@@ -74,24 +79,28 @@ public class PatchTool {
 		installPatch(application,patchFile,DEFAULT_ENTRANCE,true);
 	}
 
-	public static void installPatch(Application application,File patchFile,String defaultEntranceClass,boolean checkSign){
+	public static boolean installPatch(Application application,File patchFile,String defaultEntranceClass,boolean checkSign){
 		if(application==null||patchFile==null){
 			Log.e(TAG,"Invalid parameters with context:"+application+",patchFile:"+patchFile+",entranceClass:"+defaultEntranceClass);
-			return;
+			return false;
 		}
 		if(!patchFile.exists()){
 			Log.e(TAG,"PatchFile:"+patchFile+" not exists");
-			return;
+			return false;
 		}
 		if(checkSign&&!ApkChecker.verifyApk(application,patchFile)){
 			Log.e(TAG,"Patch file signature is not same to current Application apk file, give up to install patch file:"+patchFile);
-			return;
+			return false;
 		}
 		List<Pair<String,Long>> classIds = readPatchClassIds(patchFile,defaultEntranceClass);
+		if(classIds==null){
+			Log.e(TAG,"readPatchClassIds return null list, drop to install patch");
+			return false;
+		}
 		int size = classIds.size();
 		if(size==0){
 			Log.e(TAG,"no patch class-ids info in patch file:"+patchFile);
-			return;
+			return false;
 		}
 		String[] referrerClassList = new String[size];
 		long[] classIdxList = new long[size];
@@ -103,15 +112,16 @@ public class PatchTool {
 		boolean installSuc = InjectUtil.injectDex(application,patchFile);
         Log.d(TAG,"install patch result:"+installSuc);
 		if(installSuc&&Build.VERSION.SDK_INT < 21){
-			resolvePatchClass(application,referrerClassList,classIdxList,size);
+			installSuc = resolvePatchClass(application,referrerClassList,classIdxList,size);
 		}
+		return installSuc;
 	}
 
 	private static List<Pair<String,Long>> readPatchClassIds(File patchFile, String defaultEntranceClass){
-		List<Pair<String,Long>> classIds = new ArrayList<>();
+		List<Pair<String,Long>> classIds = new ArrayList<Pair<String,Long>>();
 		InputStream inputStream = null;
 		BufferedReader reader = null;
-		SparseArray<String> dexEntrances = new SparseArray<>();
+		SparseArray<String> dexEntrances = new SparseArray<String>();
 		try {
 			JarFile jarFile = new JarFile(patchFile);
 			ZipEntry entry = jarFile.getEntry(CLASS_ID_TXT);
@@ -125,7 +135,14 @@ public class PatchTool {
 					if(line.contains(":")){ //解析入口
 						String[] entrances = line.split(":");
 						for(int i=0;i<entrances.length;i++){
-							dexEntrances.put(i+1,entrances[i]);
+							String entrance = entrances[i];
+							if(TextUtils.isEmpty(entrance))
+								continue;
+							dexEntrances.put(i+1,entrance);
+						}
+						boolean loadEntrance = loadEntranceClasses(dexEntrances);
+						if(!loadEntrance){
+							return null;
 						}
 						continue;
 					}
@@ -142,6 +159,7 @@ public class PatchTool {
 			}
 		} catch (Exception e) {
 			Log.e(TAG,"readPatchClassIds",e);
+			return null;
 		} finally {
 			try {
 				if(reader!=null) reader.close();
@@ -154,7 +172,22 @@ public class PatchTool {
 				Log.e(TAG,"readPatchClassIds",e);
 			}
 		}
+
 		return classIds;
+	}
+
+	private static boolean loadEntranceClasses(SparseArray<String> dexEntrances) {
+		for(int i=0;i<dexEntrances.size();i++){
+			String className = dexEntrances.valueAt(i);
+			try {
+				className = className.substring(1,className.length()-1).replace("/",".");
+				PatchTool.class.getClassLoader().loadClass(className);
+			} catch (ClassNotFoundException e) {
+				Log.e(TAG,String.format(Locale.ENGLISH,"load entrance class:%s,dexIndex:%d failed, return false to interrupt patch-loading",className,i));
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static String getEntranceClass(SparseArray<String> dexEntrances,int dexIndex,String defaultValue){

@@ -24,7 +24,7 @@ class InjectUtil {
 	private static final String TAG = "InjectUtil";
 
 	static boolean injectDex(Application context, File patchFile) {
-        ArrayList<File> files = new ArrayList<>();
+        ArrayList<File> files = new ArrayList<File>();
         files.add(patchFile);
         try {
 			checkApkFiles(files);
