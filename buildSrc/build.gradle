@@ -31,10 +31,6 @@ dependencies {
     compile files('libs/commons-io-2.4.jar')
 }
 
-task clean(type: Delete){
-    delete project.buildDir
-}
-
 tasks.withType(JavaCompile) {
     compileTask ->
         compileTask.dependsOn clean

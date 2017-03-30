@@ -41,7 +41,7 @@ public class PatchTool {
 
     public static native int nativeResolvePatchClass(String[] referrerClassList, long[] classIdxList, int size);
 
-    private static boolean sIsLibLoaded = false;
+    public static boolean sIsLibLoaded = false;
     
     private static boolean loadPatchToolLib() {
 		try {
