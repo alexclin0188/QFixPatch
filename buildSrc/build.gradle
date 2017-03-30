@@ -35,3 +35,9 @@ tasks.withType(JavaCompile) {
     compileTask ->
         compileTask.dependsOn clean
 }
+
+project.ext.{
+    libVersion = "1.0.0"
+}
+
+apply from: "${project.rootDir}/bintray.gradle"

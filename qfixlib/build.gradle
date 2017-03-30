@@ -39,3 +39,9 @@ android {
 dependencies {
     compile project.ext.androidSupportAnnotation
 }
+
+project.ext.{
+    libVersion = "1.0.0"
+}
+
+apply from: "${project.rootDir}/bintray.gradle"

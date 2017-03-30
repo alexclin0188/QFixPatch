@@ -4,8 +4,5 @@ project.ext{
     buildToolsVersion = "25.0.2"
     minSdkVersion = 14
     targetSdkVersion = 19
-    androidSupport = 'com.android.support:support-v4:23.1.0'
     androidSupportAnnotation = 'com.android.support:support-annotations:23.2.1'
-    androidSupportAppCompat = 'com.android.support:appcompat-v7:23.1.0'
-    androidSupportGridLayout = 'com.android.support:gridlayout-v7:23.1.0'
 }
