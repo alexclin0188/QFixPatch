@@ -1,12 +1,12 @@
 apply plugin: 'com.jfrog.bintray'
 apply plugin: 'com.github.dcendents.android-maven'
 
-def mavenDesc = 'A android http library'
+def mavenDesc = 'A android code patch library'
 def siteUrl = 'https://github.com/alexclin0188/QFixPatch'
 def gitUrl = "${siteUrl}.git"
 def issueUrl = "${siteUrl}/issues"
 group = "alexclin.qfix"
-version projectVersion()
+version "1.0.0"
 
 install {
     repositories.mavenInstaller {
@@ -15,7 +15,7 @@ install {
             project {
                 packaging 'jar'
                 // Add your description here
-                name project.name    //项目描述
+                name "qfix-gradle"    //项目描述
                 url siteUrl
                 // Set your license
                 licenses {
@@ -40,45 +40,41 @@ install {
         }
     }
 }
+
 task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
+    from sourceSets.main.groovy.srcDirs
+    from sourceSets.main.java.srcDirs
     classifier = 'sources'
 }
-task javadoc(type: Javadoc) {
-    source = android.sourceSets.main.java.srcDirs
-    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
-}
+
 task javadocJar(type: Jar, dependsOn: javadoc) {
     classifier = 'javadoc'
     from javadoc.destinationDir
 }
+
 artifacts {
     archives javadocJar
     archives sourcesJar
 }
 
 Properties properties = new Properties()
-properties.load(project.rootProject.file('local.properties').newDataInputStream())
+properties.load(project.rootProject.file('../local.properties').newDataInputStream())
 bintray {
     user = properties.getProperty("bintray_user")
     key = properties.getProperty("bintray_key")
     configurations = ['archives']
     pkg {
         repo = "maven"
-        name = project.name   //发布到JCenter上的项目名字
+        name = "qfix-patch"   //发布到JCenter上的项目名字
         licenses = ["Apache-2.0"]
         repo = "maven"
         desc = mavenDesc
         websiteUrl = siteUrl
         vcsUrl = gitUrl
         issueTrackerUrl = issueUrl
-        labels = ['android', 'http', 'library']
+        labels = ['android', 'pacth', 'library']
         publish = true
         publicDownloadNumbers = true
         version = version
     }
-}
-
-String projectVersion(){
-    return project.ext.libVersion
 }

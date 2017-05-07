@@ -26,7 +26,7 @@
 	     dependencies {
 	        classpath 'com.android.tools.build:gradle:2.2.3'
 	
-	        classpath 'alexclin.qfix:qfix-patch:1.0.0'
+	        classpath 'alexclin.qfix:qfix-gradle:1.0.0'
 	     }
    }
    
@@ -47,6 +47,11 @@
 	    strictMode true //严格模式，用于解决ART下dex激进内联问题，
 	}
    .......
+   dependencies {
+       ......
+       compile 'alexclin.qfix:qfixlib:1.0.0'
+       ......
+   }
 ```
 
 * 打包发布版本
