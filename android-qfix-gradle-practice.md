@@ -20,7 +20,7 @@ gradle插件生成补丁逻辑和Nuwa类似，只是增加了dexdump分析补丁
 
 ![image](https://github.com/alexclin0188/QFixPatch/blob/master/qfix_gradle_proto.png)
 
-首先是buildBase，构建基础apk和保存基础信息，在dexTask之前增加hook，将原始apk中的类的sha值保存到hash.txt中，以便生成补丁时使用。
+首先是buildBase，构建基础apk和保存基础信息，在dexTask之前增加hook，将原始apk中的类的sha值保存到hash.txt中，以便生成补丁时使用。然后在buildPatch执行时比较找出修改的类(补丁类)，并通过dexdump分析这些补丁类在基础apk的dex中的class-id，将分析得到的class-id信息和补丁类通过dex工具打包成一个补丁apk。
 
 ### 3.1 创建插件工程
 
