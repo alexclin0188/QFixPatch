@@ -82,3 +82,5 @@
 }
 
 -keep class alexclin.qfix.qfixgradle.AppDelegate { public protected *; }
+
+-keeppackagenames alexclin.qfix.qfixgradle.second.**

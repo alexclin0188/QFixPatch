@@ -7,3 +7,4 @@ build
 captures/
 .externalNativeBuild
 qfix_output
+app/maindexlist.txt

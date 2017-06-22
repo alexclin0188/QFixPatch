@@ -8,6 +8,7 @@ import android.widget.TextView;
 
 import alexclin.patch.qfix.tool.PatchTool;
 import alexclin.qfix.qfixgradle.bug.TestActivity;
+import alexclin.qfix.qfixgradle.second.SecondDexActivity;
 
 public class ActMainActivity extends Activity {
 
@@ -23,6 +24,13 @@ public class ActMainActivity extends Activity {
             @Override
             public void onClick(View view) {
                 startActivity(new Intent(view.getContext(), TestActivity.class));
+            }
+        });
+
+        findViewById(R.id.jump_two).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                startActivity(new Intent(view.getContext(), SecondDexActivity.class));
             }
         });
     }

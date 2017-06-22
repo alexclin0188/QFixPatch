@@ -2,6 +2,7 @@ apply plugin: 'com.android.application'
 apply from: '../config.gradle'
 
 apply plugin: 'alexclin.qfix'
+apply plugin: 'dexknifePlus'
 
 qfix{
     debugOn true //debug模式是否开启补丁构建task,可选
@@ -27,6 +28,7 @@ android {
         applicationId "alexclin.qfix.qfixgradle"
         versionCode 1
         versionName "1.0"
+        multiDexEnabled true
     }
     signingConfigs{
         release{
@@ -42,6 +44,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
+    }
+    dexKnife {
+        //必选参数
+        enabled true //if false,禁用分包插件
     }
 }
 

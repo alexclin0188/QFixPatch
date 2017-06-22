@@ -14,7 +14,7 @@ class DexClassIdResolve {
      * @param outputPath 输出路径
      * @throws Exception dexDump的异常
      */
-    public static void dumpDexClassIds(String dexDumpPath,File dexDir,File patchClassDir,File outputFile,String application,Set<String> patchRefSet) throws Exception{
+    public static void dumpDexClassIds(String dexDumpPath,File dexDir,File patchClassDir,File outputFile,String application,Set<String> patchRefSetOrigin) throws Exception{
         HashSet<String> patchClassSet = new HashSet<String>();
         String[] extensions = ["class"];
         Collection<File> classFiles = FileUtils.listFiles(patchClassDir,extensions, true);
@@ -22,8 +22,12 @@ class DexClassIdResolve {
             ClassReader reader = new ClassReader(new FileInputStream(file));
             String ctClassName = reader.className;
             if (!patchClassSet.contains(ctClassName)) {
-                patchClassSet.add(ctClassName);
+                patchClassSet.add(trimClassName(ctClassName));
             }
+        }
+        Set<String> patchRefSet = new HashSet<>();
+        for(String name:patchRefSetOrigin){
+            patchRefSet.add(trimClassName(name))
         }
         println "ResolveDexClassId patchClass size=" + patchClassSet.size();
         if(patchClassSet.size()==0){
@@ -51,13 +55,13 @@ class DexClassIdResolve {
             String entrance = readClassIdMap(process.getInputStream(), dexIndex, patchClassSet,patchRefSet,resultList);
             readErrorInfo(process.getErrorStream());
             if(entrance==null){
-                throw new IllegalStateException("readClassIdMap error for dex:"+dexIndex);
+                throw new IllegalStateException("readClassIdMap error, no entrance class for dex:"+dexIndex);
             }
             classIdMapList.add(resultList);
             if(dexIndex<2){
                 stringBuilder.append("L").append(application).append(";:")
             }else{
-                stringBuilder.append("L").append(trimClassName(entrance)).append(";:")
+                stringBuilder.append("L").append(entrance).append(";:")
             }
         }
         stringBuilder.append("\n")
@@ -159,9 +163,10 @@ class DexClassIdResolve {
                     if (mPatchSet.contains(className)) {
                         ClassIdMap item = new ClassIdMap(className, mDexIndex, classIdx);
                         mClassIdMapList.add(item);
-                    }else if(classIndex>1&&!patchRefSet.contains(className)&&entrance==null){
+                    }else if(!patchRefSet.contains(className)&&entrance==null){
                         entrance = className;
                     }
+                    System.out.println("className:"+className)
                     findHead = false;
                     findClass = false;
                     classIndex = -1;

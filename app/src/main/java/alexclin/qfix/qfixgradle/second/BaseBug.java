@@ -1,4 +1,4 @@
-package alexclin.qfix.qfixgradle.bug;
+package alexclin.qfix.qfixgradle.second;
 
 /**
  * BaseBug
@@ -8,6 +8,6 @@ package alexclin.qfix.qfixgradle.bug;
 
 public abstract class BaseBug {
     protected void appendBugMsg(StringBuilder builder) {
-        if (builder != null) builder.append("\nbug msg from BaseBug----Origin");
+        if (builder != null) builder.append("\nbug msg from BaseBug-----Origin");
     }
 }

@@ -263,6 +263,7 @@ public class QFixPlugin implements Plugin<Project> {
         String[] extensions = ["class"];
         File combinedJarFile = new File(project.buildDir, 'qfix-combined.jar');
         JarOutputStream jarOutputStream = new JarOutputStream(new FileOutputStream(combinedJarFile));
+        Set<String> entryNames = new HashSet<>();
         for (File file : files) {
             if (file.isFile()) {
                 def jarFile = new JarFile(file);
@@ -270,7 +271,8 @@ public class QFixPlugin implements Plugin<Project> {
                 while (enumeration.hasMoreElements()) {
                     JarEntry jarEntry = (JarEntry) enumeration.nextElement();
                     String entryName = jarEntry.getName();
-                    if (entryName.endsWith(".class")) {
+                    if (entryName.endsWith(".class")&&!entryNames.contains(entryName)) {
+                        entryNames.add(entryName);
                         InputStream inputStream = jarFile.getInputStream(jarEntry);
                         jarOutputStream.putNextEntry(new ZipEntry(entryName));
                         jarOutputStream << inputStream
@@ -290,11 +292,14 @@ public class QFixPlugin implements Plugin<Project> {
                             } else {
                                 classPath = classPath.split("${dirName}/")[1]
                             }
-                            jarOutputStream.putNextEntry(new ZipEntry(classPath));
-                            FileInputStream fis = new FileInputStream(inputClassFile);
-                            jarOutputStream << fis
-                            fis.close();
-                            jarOutputStream.closeEntry();
+                            if(!entryNames.contains(classPath)) {
+                                entryNames.add(classPath);
+                                jarOutputStream.putNextEntry(new ZipEntry(classPath));
+                                FileInputStream fis = new FileInputStream(inputClassFile);
+                                jarOutputStream << fis
+                                fis.close();
+                                jarOutputStream.closeEntry();
+                            }
                         }
                 }
             }
