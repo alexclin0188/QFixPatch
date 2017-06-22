@@ -80,7 +80,7 @@
 
 ./gradlew clean assembleReleaseBase //执行assembleRelease的同时保存release apk基础信息
 
-./gradlew clean buildBase //相当于同时执行assembleDebugPatch + assembleReleasePatch
+./gradlew clean buildPatch //相当于同时执行assembleDebugPatch + assembleReleasePatch
 
 ./gradlew clean assembleDebugPatch //构建debug补丁
 
