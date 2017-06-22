@@ -18,7 +18,7 @@ GitHub上有一个开源的简单的QFix方案Eclipse工程demo:[https://github.
 
 gradle插件生成补丁逻辑和Nuwa类似，只是增加了dexdump分析补丁类class-id的操作，简单的流程示意图如下：
 
-![image](qfix_gradle_proto.png)
+![image](https://github.com/alexclin0188/QFixPatch/blob/master/qfix_gradle_proto.png)
 
 首先是buildBase，构建基础apk和保存基础信息，在dexTask之前增加hook，将原始apk中的类的sha值保存到hash.txt中，以便生成补丁时使用。
 
